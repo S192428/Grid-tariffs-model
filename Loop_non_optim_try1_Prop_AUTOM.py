@@ -54,7 +54,7 @@ for bl in range(len(Design_test)):
     # ----------------------------------------------------------------------------
     # Preparation of the results and loop
     # ----------------------------------------------------------------------------
-    # Consumer data randomly selected
+    # Consumer table preparation
     Nbr_Cons = 2
     Pro_Pen = 0.5
     Consumers = pd.DataFrame(0, index=[i for i in range(Nbr_Cons)], columns = ['Percentage','Heat Demand','Electricity Demand','Active/Passive'])
@@ -68,7 +68,7 @@ for bl in range(len(Design_test)):
             Consumers.loc[i,'Active/Passive'] = 0
             Consumers.loc[i,'Percentage'] = 1-Pro_Pen
       
-    # Creation of the tabe storing the results time after time
+    # Creation of the tables storing the results time after time
     Results_NC = pd.DataFrame(0,[i for i in range(Nbr_Cons)], columns = ['Network charges collected','PV','Battery','P2H','HS','Boiler','Total Network Cost','Taxes','O&M','Energy costs','Investments','Carbon cost','Volumetric NC part','Capacity NC part','Fixed NC part','PV prod','G import','G export','DH import','Bo prod','P2H Hprod'])
     NC_collected = 0 # NC collected --> careful should equal charges for the DSO by people
     Sunk_Costs = 404*100
@@ -117,7 +117,7 @@ for bl in range(len(Design_test)):
     Param_prev.loc['Values','FNP'] = 10 #Fixed Network Price
     Param_prev.loc['Values','Vol_per'] = Design_test.loc[bl,'Vol_per'] #percentage of volumetric charges in network tariffs
     Param_prev.loc['Values','Capa_per'] = Design_test.loc[bl,'Capa_per'] #percentage of capacity charges in network tariffs
-    BC = 66
+    BC = 1
     
     Carbon_price = 0.02 # €/kg
     Gas_Intensity = 0.201959999983843 #kg/kWh
@@ -228,7 +228,6 @@ for bl in range(len(Design_test)):
             
             def Network_Charges_c(M):
                 # Network charges for one consumer 
-                # Second return is with the same price for all three components
                 return sum((M.G_import[t]-M.G_export[t]*(NM-NNM))*VNP for t in T) + M.Peak_Load*CNP + FNP #add eventually the proportions
                 # return 0
             
@@ -238,7 +237,6 @@ for bl in range(len(Design_test)):
             
             def Investment_Cost_c(M):
                 # Investment cost in the equipment for one consumer
-                # Annuity factor ? 
                 PV_CAPEX_annualized = float(PV_par["Capital_cost"])/float(PV_par["Lifetime"])
                 Battery_CAPEX_annualized = float(Battery_par["Capital_cost"])/float(Battery_par["Lifetime"])
                 P2H_CAPEX_annualized = float(P2H_par["Capital_cost"])/float(P2H_par["Lifetime"])
@@ -254,11 +252,7 @@ for bl in range(len(Design_test)):
             def Tax_cost_c(M):
                 return sum((M.G_import[t] + M.PV_prod[t] - M.G_export[t] - M.P2H_ELcons[t])*float(Taxes['Electricity']) + M.P2H_ELcons[t]*float(Taxes['Electricity_for_heat']) + M.DH_import[t]*float(Taxes['Heat']) + M.Bo_prod[t]*float(Taxes['Gas']) for t in T)
                 # return 0
-            
-            # Total costs for the consumer
-            # def Objective_rule(M):
-            #     return Energy_Cost_c(M) + Network_Charges_c(M) + Fixed_Charges_c(M) + Investment_Cost_c(M) + OM_cost_c(M) + Tax_cost_c(M) + Carbone_emitted_Cost(M)
-            # M.Objective_Rule=Objective(rule=Objective_rule,sense=minimize)
+
             Objective_rule = Energy_Cost_c(M) + Network_Charges_c(M) + Fixed_Charges_c(M) + Investment_Cost_c(M) + OM_cost_c(M) + Tax_cost_c(M) + Carbone_emitted_Cost(M)
             M.Objective_Rule=Objective(expr=Objective_rule,sense=minimize)
             
@@ -276,10 +270,12 @@ for bl in range(len(Design_test)):
             
             # P2H constraints -------------------------------------------------------------
             def P2H_production_rule(M,t):
+             # def of production
                 return M.P2H_ELcons[t] == M.P2H_Hprod[t]/P2H_par['Eff']
             M.P2H_prod_Cons=Constraint(M.T,rule=P2H_production_rule)
             
             def P2H_production_max_rule(M,t):
+             # cap
                 return M.P2H_Hprod[t] <= M.P2H_Capa
             M.P2H_prod_max_Cons=Constraint(M.T,rule=P2H_production_max_rule)
             # ----------------------------------------------------------------------------
@@ -299,6 +295,7 @@ for bl in range(len(Design_test)):
             
             # Boiler constraints -----------------------------------------------------------
             def Bo_production_max_rule(M,t):
+             # cap
                 return M.Bo_prod[t] <= M.Bo_Capa
             M.Bo_prod_max_Cons=Constraint(M.T,rule=Bo_production_max_rule)
             # ----------------------------------------------------------------------------
@@ -395,7 +392,6 @@ for bl in range(len(Design_test)):
             def Network_Charges_rule(M):
                 # Network charges for one consumer 
                 return sum(M.G_import[t] - M.G_export[t] for t in T) >= 0
-                # return sum((M.G_import[t]-M.G_export[t]*(NM-NNM))*VNP for t in T) + M.Peak_Load*CNP + FNP >= 0
             M.Network_Charges_cons=Constraint(rule=Network_Charges_rule)
             # -----------------------------------------------------------------------------
             
@@ -407,6 +403,10 @@ for bl in range(len(Design_test)):
             # solver=SolverFactory('glpk')
             Res_Obj=solver.solve(M)
             print(value(M.Objective_Rule))
+            
+            # ----------------------
+            # Allocation of the results
+            # ----------------------
             Results_NC.loc[i,'Network charges collected'] = value(Network_Charges_c(M))
             Results_NC.loc[i,'PV']=value(M.PV_Capa)
             Results_NC.loc[i,'Battery']=value(M.B_Capa)
@@ -448,7 +448,9 @@ for bl in range(len(Design_test)):
                 # Costs_time.loc[t,'Carbone Costs'+str(i)] = value(M.G_import[t]*float(CO2_intensities.loc[t,'EL average'])*Carbon_price + M.DH_import[t]*float(CO2_intensities.loc[t,'H average'])*Carbon_price)
                 
     
-        # Net metering or not net metering
+        # ----------------------
+        # Preparation of the DSO calculations 
+        # ----------------------
         DSO_NM = float(Param_prev.loc['Values','NM'])
         DSO_NNM = float(Param_prev.loc['Values','NNM'])
         DSO_VNP = float(Param_prev.loc['Values','VNP'])
@@ -459,7 +461,7 @@ for bl in range(len(Design_test)):
         DSO_Sunk_Costs = float(Sunk_Costs)
         
         # ------------------------------------------------------------------------
-        # Objective function for the DSO
+        # Calculations of costs
         # ------------------------------------------------------------------------
         def VCosts_collected_rule():
             return sum(sum((float(Results_time.loc[t,'Import'+str(i)]) - float(Results_time.loc[t,'Export'+str(i)])*(DSO_NM - DSO_NNM)) for t in T)*Consumers.loc[i,'Percentage']*100 for i in range(0,Nbr_Cons)) #*float(Consumers.loc[i,'Percentage'])*DSO_Vol_per
@@ -472,12 +474,15 @@ for bl in range(len(Design_test)):
         
         
         # ------------------------------------------------------------------------
-        # Constraints
+        # Calculations of cost coefficients
         # ------------------------------------------------------------------------
         DSO_VNP = DSO_Sunk_Costs * DSO_Vol_per / VCosts_collected_rule()
         DSO_CNP = DSO_Sunk_Costs * DSO_Capa_per / CCosts_collected_rule()
         DSO_FNP = DSO_Sunk_Costs * (1 - DSO_Vol_per - DSO_Capa_per) / FCosts_collected_rule()
         
+        # ----------------------
+        # Results allocation for next iteration or exit
+        # ----------------------
         
         Param_prev.loc['Values','NM'] = DSO_NM
         Param_prev.loc['Values','NNM'] = DSO_NNM
@@ -487,6 +492,7 @@ for bl in range(len(Design_test)):
         Param_prev.loc['Values','Vol_per'] = DSO_Vol_per
         Param_prev.loc['Values','Capa_per'] = DSO_Capa_per
         
+        #relative capacity change calculation
         if sum(sum(Results_NC_prev.loc[cons,tech] for tech in Sets_tech) for cons in range(0,Nbr_Cons)) == 0:
             Relative_change_capa = sum(sum((Results_NC.loc[cons,tech]-Results_NC_prev.loc[cons,tech]) for tech in Sets_tech) for cons in range(0,Nbr_Cons))
         else: 
