@@ -5,4 +5,4 @@ Only one profile at a time can be used (codes allowing for the use of more than 
 Python files coded to take into account all fluxes might be added later
 
 Variables can be adjusted by the user, but the tariff structures are handled by the automation process, which is automatically running through all of the tested ones. 
-CPT codes is only to be used for the implementation of the CPT scheme, the others being handled by the main code. The percentage of time that the peak and valley hours represent can be modified, and the coefficients too. 
+ADJ code is only to be used for the implementation of the CPT scheme, the others being handled by the main code. The percentage of time that the peak and valley hours represent can be modified, and the coefficients too. 
